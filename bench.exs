@@ -1,7 +1,9 @@
-# only reads
+IO.puts("Setting up benchmark...")
 
-# SERVER
+# how much load
+parallel = 6
 
+# GENSERVER
 small_simple = 0..10 |> Enum.map(fn n -> {to_string(n), to_string(n)} end) |> Enum.into(%{})
 medium_simple = 0..10_000 |> Enum.map(fn n -> {to_string(n), to_string(n)} end) |> Enum.into(%{})
 
@@ -14,35 +16,34 @@ large_simple =
 
 alias Pterm.MapServer
 
+IO.puts("Setting up GenServer...")
 {:ok, small_server} = MapServer.start_link(%{data: small_simple})
 {:ok, medium_server} = MapServer.start_link(%{data: medium_simple})
 {:ok, large_server} = MapServer.start_link(%{data: large_simple})
 
 # ETS
-
+IO.puts("Setting up ETS...")
 :ets.new(:small_table, [{:read_concurrency, true}, :named_table])
 :ets.new(:medium_table, [{:read_concurrency, true}, :named_table])
 :ets.new(:large_table, [{:read_concurrency, true}, :named_table])
-
-# 0..10
-# |> Enum.map(fn n -> {to_string(n), to_string(n)} end)
-# |> Enum.each(fn t -> :ets.insert(:small_table, t) end)
-
-# 0..10_000
-# |> Enum.map(fn n -> {to_string(n), to_string(n)} end)
-# |> Enum.each(fn t -> :ets.insert(:medium_table, t) end)
-
-# 0..1_000_000
-# |> Enum.map(fn n -> {to_string(n), to_string(n)} end)
-# |> Enum.each(fn t -> :ets.insert(:large_table, t) end)
 
 :ets.insert(:small_table, {:benchmark, small_simple})
 :ets.insert(:medium_table, {:benchmark, medium_simple})
 :ets.insert(:large_table, {:benchmark, large_simple})
 
+# FASTGLOBAL
+IO.puts("Setting up FastGlobal...")
+FastGlobal.put(:small, small_simple)
+FastGlobal.put(:medium, medium_simple)
+FastGlobal.put(:large, large_simple)
+
+# PERSISTENT TERM
+IO.puts("Setting up persistent_term...")
 :persistent_term.put({:benchmark, :small}, small_simple)
 :persistent_term.put({:benchmark, :medium}, medium_simple)
 :persistent_term.put({:benchmark, :large}, large_simple)
+
+IO.puts("starting benchmark...")
 
 Benchee.run(
   %{
@@ -67,6 +68,18 @@ Benchee.run(
       [{:benchmark, m}] = :ets.lookup(:large_table, :benchmark)
       m |> Map.fetch!(to_string(:rand.uniform(1_000_000)))
     end,
+    "fastglobal small" => fn ->
+      m = FastGlobal.get(:small)
+      m |> Map.fetch!(to_string(:rand.uniform(10)))
+    end,
+    "fastglobal medium" => fn ->
+      m = FastGlobal.get(:medium)
+      m |> Map.fetch!(to_string(:rand.uniform(10_000)))
+    end,
+    "fastglobal large" => fn ->
+      m = FastGlobal.get(:large)
+      m |> Map.fetch!(to_string(:rand.uniform(1_000_000)))
+    end,
     "peristent_term small" => fn ->
       :persistent_term.get({:benchmark, :small}) |> Map.fetch!(to_string(:rand.uniform(10)))
     end,
@@ -80,6 +93,6 @@ Benchee.run(
     end
   },
   # memory_time: 2,
-  parallel: 60,
+  parallel: parallel,
   print: [fast_warning: false]
 )

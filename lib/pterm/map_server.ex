@@ -13,10 +13,6 @@ defmodule Pterm.MapServer do
     GenServer.call(pid, :get, 30_000)
   end
 
-  def get(pid, key) do
-    GenServer.call(pid, {:get, key})
-  end
-
   # CALLBACKS
   ######################################
 
@@ -26,10 +22,5 @@ defmodule Pterm.MapServer do
 
   def handle_call(:get, _from, state) do
     {:reply, state, state}
-  end
-
-  def handle_call({:get, key}, _from, state) do
-    %{^key => val} = state
-    {:reply, val, state}
   end
 end
